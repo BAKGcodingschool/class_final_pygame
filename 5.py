@@ -6,7 +6,7 @@ Day-iteration:
 5-2: Sprite class
 3-3: Sprite group and update() function
 5-4: Collisions
-5-5: Regeneration
+5-5: Regeneration of crashed trees
 """
 import random
 
@@ -83,6 +83,7 @@ while game_on:
                 player.y_inc = 0
 
     player.update()
+    trees.update()
 
     if player.rect.x < 0:
         player.rect.x = 0
@@ -93,16 +94,12 @@ while game_on:
     elif player.rect.y > BOARD_HEIGHT - player.height:
         player.rect.y = BOARD_HEIGHT - player.height
 
-    BOARD.blit(player.image, (player.rect.x, player.rect.y))
-
     if len(trees) < TREES_MAX:
         tree = Character('tree')
         tree.rect.x = random.randint(0, BOARD_WIDTH - tree.width)
         tree.rect.y = random.randint(0, BOARD_HEIGHT) + BOARD_HEIGHT
         tree.y_inc = -tree.speed
         trees.add(tree)
-
-    trees.update()
 
     for tree in trees:
         if tree.rect.y < -tree.height:
@@ -113,6 +110,7 @@ while game_on:
     for hit in hits:
         print('Ouch!')
 
+    BOARD.blit(player.image, (player.rect.x, player.rect.y))
     trees.draw(BOARD)
 
     pygame.display.flip()

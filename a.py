@@ -9,7 +9,11 @@ Day-iteration:
 5-5: Regeneration of crashed trees
 5-6: Flags and points
 5-7: Player class and image directions
+5-8: Sounds
+5-9: Crash handling and game end
+5-a: Score and messages
 """
+import os
 import random
 
 import pygame
@@ -23,11 +27,81 @@ DOWNHILL_SPEED = 4
 TREES_MAX = 10
 FLAGS_MAX = 10
 POINTS = 10
+SOUND_FILES = (
+    'bonus',
+    'crash',
+    'gameover',
+    )
+SOUND_PATH = 'sounds'
+BG_MUSIC = 'music'
+CRASH_MAX = 3  # How many crashes are allowed before the game ends
+CRASH_TIME = FRAME_RATE * 2  # How many seconds each crash delays the game
+TEXT_SIZE = 40
+TEXT_COLOR = (204, 0, 255)
 
 pygame.init()
 
 BOARD = pygame.display.set_mode(BOARD_SIZE)
 CLOCK = pygame.time.Clock()
+
+
+class SoundStore:
+    """Storage for sounds.
+    """
+    def __init__(self, path='', ext='wav'):
+        """Initialize the sound store with location and type of sounds.
+
+        Args:
+            path: Path to sound folder
+            ext: Extension for sound files, with no dot.
+        """
+        self.store = {}
+        self.path = path
+        self.ext = ext.strip('.')
+
+    def add(self, name):
+        """Add a sound to the store by name.
+
+        Args:
+            name: Name of sound to store (the base name of the file)
+
+        Returns:
+        """
+        status = True
+        if name not in self.store:
+            sound_file = os.path.join(self.path, f'{name}.{self.ext}')
+            try:
+                sound = pygame.mixer.Sound(sound_file)
+                self.store[name] = sound
+            except:
+                status = False
+        else:
+            print(f'NOTICE: Sound {name} is already in the sound store.')
+        return status
+
+    def play(self, name):
+        """Play sound in the sound store.
+
+        Args:
+            name: Name of the sound to play.
+        """
+        if name in self.store:
+            self.store[name].play()
+
+    def bg_start(self, name):
+        """Play background music.
+
+        Args:
+            name: Name of a file to use as background music.
+        """
+        sound_file = os.path.join(self.path, f'{name}.{self.ext}')
+        pygame.mixer.music.load(sound_file)
+        pygame.mixer.music.play(-1, 0.0)
+
+    def bg_stop(self):
+        """Stop background music.
+        """
+        pygame.mixer.music.stop()
 
 
 class Character(pygame.sprite.Sprite):
@@ -72,7 +146,10 @@ class Player(Character):
         self.image_left = pygame.image.load(f'images/{self.name}-sw.png')
         self.image_right = pygame.image.load(f'images/{self.name}-se.png')
         self.image_shadow = pygame.image.load(f'images/{self.name}-shadow.png')
+        self.image_crash = pygame.image.load(f'images/{self.name}-stunned.png')
         self.score = 0
+        self.crashes = 0
+        self.crash_time = 0
 
     def draw(self, board):
         """Create a draw() method to be consistent with Sprite Groups.
@@ -80,7 +157,9 @@ class Player(Character):
         Args:
             board: A surface object (like BOARD)
         """
-        if self.x_inc > 0:
+        if self.crash_time > 0:
+            image = self.image_crash
+        elif self.x_inc > 0:
             image = self.image_right
         elif self.x_inc < 0:
             image = self.image_left
@@ -89,6 +168,56 @@ class Player(Character):
         BOARD.blit(self.image_shadow, (self.rect.x, self.rect.y))
         BOARD.blit(image, (self.rect.x, self.rect.y))
 
+
+def text2image(text, size=TEXT_SIZE, color=TEXT_COLOR):
+    """Create an image from a text string.
+
+    Args:
+        text: Text to convert to an image.
+        size: Text size, in points.
+        color: RGP tuple, in decimal; example: (255, 0, 255) is magenta.
+
+    Returns:
+        An image object of the specified text.
+    """
+    font = pygame.font.Font(None, size)
+    image = font.render(text, 1, color)
+    return image
+
+
+def show_stats(score, crashes):
+    """Show player score and crash statistics on the board.
+
+    Args:
+        score: Integer value.
+        crashes: Integer number of crashes the player has had.
+    """
+    text = f'Score: {score}  Crashes: {crashes}/{CRASH_MAX}'
+    text_image = text2image(text)
+    text_width, text_height = text_image.get_size()
+    text_x = 50
+    text_y = BOARD_HEIGHT - text_height
+    BOARD.blit(text_image, (text_x, text_y))
+
+
+def end_game():
+    """Show game over message.
+    """
+    text_image = text2image('Game Over')
+    text_width, text_height = text_image.get_size()
+    center_x = (BOARD_WIDTH - text_width) // 2
+    center_y = (BOARD_HEIGHT - text_height) // 2
+    BOARD.blit(text_image, (center_x, center_y))
+    pygame.display.flip()
+    SOUNDS.bg_stop()
+    SOUNDS.play('gameover')
+    pygame.time.wait(5 * 1000)
+
+
+SOUNDS = SoundStore(SOUND_PATH)
+for sound_file in SOUND_FILES:
+    SOUNDS.add(sound_file)
+SOUNDS.bg_start(BG_MUSIC)
 
 player = Player('kiiro')
 player.rect.x = (BOARD_WIDTH - player.width) // 2
@@ -120,9 +249,12 @@ while game_on:
             elif event.key in (pygame.K_UP, pygame.K_DOWN):
                 player.y_inc = 0
 
-    player.update()
-    trees.update()
-    flags.update()
+    if player.crash_time > 0:
+        player.crash_time -= 1
+    else:
+        player.update()
+        trees.update()
+        flags.update()
 
     if player.rect.x < 0:
         player.rect.x = 0
@@ -147,8 +279,10 @@ while game_on:
 
     hits = pygame.sprite.spritecollide(player, trees, dokill=True)
     for hit in hits:
-        print('Ouch!')
+        SOUNDS.play('crash')
         player.score -= hit.points
+        player.crashes += 1
+        player.crash_time = CRASH_TIME
 
     if len(flags) < FLAGS_MAX:
         flag = Character('flag')
@@ -164,14 +298,19 @@ while game_on:
 
     hits = pygame.sprite.spritecollide(player, flags, dokill=True)
     for hit in hits:
-        print('Yeah!')
+        SOUNDS.play('bonus')
         player.score += hit.points
 
     player.draw(BOARD)
     trees.draw(BOARD)
     flags.draw(BOARD)
+    show_stats(player.score, player.crashes)
+
+    if player.crashes >= CRASH_MAX:
+        game_on = False
 
     pygame.display.flip()
     CLOCK.tick(FRAME_RATE)
+end_game()
 
 pygame.quit()

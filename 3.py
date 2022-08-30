@@ -88,6 +88,7 @@ while game_on:
                 player.y_inc = 0
 
     player.update()
+    trees.update()
 
     if player.rect.x < 0:
         player.rect.x = 0
@@ -98,15 +99,12 @@ while game_on:
     elif player.rect.y > BOARD_HEIGHT - player.height:
         player.rect.y = BOARD_HEIGHT - player.height
 
-    BOARD.blit(player.image, (player.rect.x, player.rect.y))
-
-    trees.update()
-
     for tree in trees:
         if tree.rect.y < -tree.height:
             tree.rect.x = random.randint(0, BOARD_WIDTH - tree.width)
             tree.rect.y = BOARD_HEIGHT
 
+    BOARD.blit(player.image, (player.rect.x, player.rect.y))
     trees.draw(BOARD)
 
     pygame.display.flip()
